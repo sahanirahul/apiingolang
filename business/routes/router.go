@@ -1,13 +1,17 @@
 package routes
 
 import (
+	"apiingolang/activity/business/entities/dto"
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/repository/db"
 	"apiingolang/activity/business/repository/http"
 	"apiingolang/activity/business/usecase/activity"
+	"context"
 	"database/sql"
+	"fmt"
 	corehttp "net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,7 +26,7 @@ func provideActivityRouter(dbconn *sql.DB) *activityRouter {
 
 func ActivityRoutes(apigroup *gin.RouterGroup, db *sql.DB) {
 	r := provideActivityRouter(db)
-	apigroup.GET("/v1/activities", r.getActivities)
+	apigroup.GET("/v1/activities", r.processActivitiesRequest)
 }
 
 type activityRouter struct {
@@ -41,20 +45,47 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 	return arouter
 }
 
-func (ar *activityRouter) getActivities(c *gin.Context) {
+func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 	//todo: CleanArch complete
 	//call activity service
-	activities, err := ar.activityManager.FetchActivities(c)
-	if err != nil {
+	timelimitexceeded := false
+	activitiesList := &dto.Activities{}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go maxtimewait(&wg, &timelimitexceeded)
+	go ar.getActivities(c, activitiesList, &wg)
+	wg.Wait()
+
+	if timelimitexceeded {
 		c.JSON(corehttp.StatusUnprocessableEntity, gin.H{
-			"status":  true,
+			"status":  false,
 			"message": "failure",
-			"error":   err.Error(),
+			"error":   "(Activity-API not available)",
+		})
+	} else {
+		c.JSON(corehttp.StatusOK, gin.H{
+			"status":     true,
+			"message":    "success",
+			"activities": activitiesList,
 		})
 	}
-	c.JSON(corehttp.StatusOK, gin.H{
-		"status":     true,
-		"message":    "success",
-		"activities": activities,
-	})
+}
+
+func maxtimewait(wg *sync.WaitGroup, timelimitexceeded *bool) {
+	timer := time.NewTimer(2 * time.Second)
+	<-timer.C
+	*timelimitexceeded = true
+	wg.Done()
+	wg.Done()
+}
+
+func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto.Activities, wg *sync.WaitGroup) {
+	activities, err := ar.activityManager.FetchActivities(ctx)
+	// time.Sleep(3 * time.Second)
+	if err != nil {
+		fmt.Println(err)
+	}
+	activitiesList = &activities
+	wg.Done()
+	wg.Done()
 }
