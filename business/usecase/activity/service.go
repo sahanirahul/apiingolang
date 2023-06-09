@@ -2,11 +2,14 @@ package activity
 
 import (
 	"apiingolang/activity/business/entities/dto"
+	"apiingolang/activity/business/entities/utility"
 	"apiingolang/activity/business/interfaces/irepo"
 	"apiingolang/activity/business/interfaces/iusecase"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type activityService struct {
@@ -30,11 +33,40 @@ func NewActivityService(httprepo irepo.IHttpRepo, activityrepo irepo.IActivityRe
 
 func (c *activityService) FetchActivities(ctx context.Context) (dto.Activities, error) {
 	// fetch the 3 activities and other logic here
-	ac, err := c.httprepo.GetActivityFromBoredApi(ctx)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
+	activities := dto.Activities{}
+	syncMap := utility.SyncMap{}
+	wg := sync.WaitGroup{}
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go c.fetchActivity(ctx, &syncMap, &wg)
 	}
+	wg.Wait()
+	for _, val := range syncMap.GetAllEntry() {
+		ac := dto.Activity{}
+		err := utility.MapObjectToAnother(val, &ac)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		activities = append(activities, ac)
+	}
+	return activities, nil
+}
 
-	return dto.Activities{dto.CreateActivity(ac)}, nil
+func (c *activityService) fetchActivity(ctx context.Context, syncmap *utility.SyncMap, wg *sync.WaitGroup) (*dto.Activity, error) {
+	// fetch a new activity here
+	start := time.Now()
+	defer wg.Done()
+	for time.Since(start) <= time.Second*2 {
+		ac, err := c.httprepo.GetActivityFromBoredApi(ctx)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		flag := syncmap.PutIfNotPresent(ac.Key, ac)
+		if flag {
+			return ac, nil
+		}
+	}
+	return nil, errors.New("time limit exceeded")
 }

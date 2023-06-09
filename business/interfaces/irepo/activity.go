@@ -10,5 +10,5 @@ type IActivityRepo interface {
 }
 
 type IHttpRepo interface {
-	GetActivityFromBoredApi(ctx context.Context) (*dto.BoredApiActivityResponse, error)
+	GetActivityFromBoredApi(ctx context.Context) (*dto.Activity, error)
 }
