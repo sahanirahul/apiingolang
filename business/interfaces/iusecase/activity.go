@@ -1,5 +1,10 @@
 package iusecase
 
+import (
+	"apiingolang/activity/business/entities/dto"
+	"context"
+)
+
 type IActivityService interface {
-	FetchActivities() error
+	FetchActivities(ctx context.Context) (dto.Activities, error)
 }

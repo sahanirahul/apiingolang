@@ -3,6 +3,7 @@ package db
 import (
 	"apiingolang/activity/business/interfaces/icore"
 	"apiingolang/activity/business/interfaces/irepo"
+	"context"
 	"sync"
 )
 
@@ -22,7 +23,7 @@ func NewActivityRepo(db icore.IDB) irepo.IActivityRepo {
 	return repo
 }
 
-func (cr *activityrepo) InsertActivities() error {
+func (cr *activityrepo) InsertActivities(ctx context.Context) error {
 	//insert activities in db
 	return nil
 }

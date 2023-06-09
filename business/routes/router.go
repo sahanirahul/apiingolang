@@ -1,13 +1,11 @@
 package routes
 
 import (
-	"apiingolang/activity/business/entities/dto"
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/repository/db"
 	"apiingolang/activity/business/repository/http"
 	"apiingolang/activity/business/usecase/activity"
 	"database/sql"
-	"fmt"
 	corehttp "net/http"
 	"sync"
 
@@ -46,11 +44,17 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 func (ar *activityRouter) getActivities(c *gin.Context) {
 	//todo: CleanArch complete
 	//call activity service
-	fmt.Println(ar.activityManager.FetchActivities())
+	activities, err := ar.activityManager.FetchActivities(c)
+	if err != nil {
+		c.JSON(corehttp.StatusUnprocessableEntity, gin.H{
+			"status":  true,
+			"message": "failure",
+			"error":   err.Error(),
+		})
+	}
 	c.JSON(corehttp.StatusOK, gin.H{
 		"status":     true,
 		"message":    "success",
-		"activities": dto.Activities{dto.Activity{Key: "testkey", Activity: "test.activity"}},
+		"activities": activities,
 	})
-
 }

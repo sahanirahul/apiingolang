@@ -1,9 +1,14 @@
 package irepo
 
+import (
+	"apiingolang/activity/business/entities/dto"
+	"context"
+)
+
 type IActivityRepo interface {
-	InsertActivities() error
+	InsertActivities(ctx context.Context) error
 }
 
 type IHttpRepo interface {
-	CallExternal() error
+	GetActivityFromBoredApi(ctx context.Context) (*dto.BoredApiActivityResponse, error)
 }
