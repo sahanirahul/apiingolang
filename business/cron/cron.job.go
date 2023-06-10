@@ -3,7 +3,8 @@ package cron
 import (
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/utils/logging"
-	"context"
+	"apiingolang/activity/middleware"
+	"apiingolang/activity/middleware/corel"
 	"sync"
 
 	"github.com/robfig/cron"
@@ -26,10 +27,15 @@ func StartNewCron(activityService iusecase.IActivityService) {
 }
 
 func (cro *cronn) storeBoredApiActivities() {
-	ctx := context.Background()
 	c := cron.New()
-
 	c.AddFunc("@every 15s", func() {
+		ctx := corel.CreateNewContext()
+		// adding recovery for worker go routines
+		defer func() {
+			if err := recover(); err != nil {
+				middleware.Recover(ctx, err)
+			}
+		}()
 		logging.Logger.WriteLogs(ctx, "cron_started", logging.InfoLevel, logging.Fields{})
 		err := cro.activityService.SaveFetchedActivitiesTillNow(ctx)
 		if err != nil {

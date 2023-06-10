@@ -6,6 +6,6 @@ import (
 )
 
 type IActivityService interface {
-	FetchActivities(ctx context.Context) (dto.Activities, error)
+	FetchActivities(ctx context.Context, cancel context.CancelFunc) (dto.Activities, error)
 	SaveFetchedActivitiesTillNow(ctx context.Context) error
 }

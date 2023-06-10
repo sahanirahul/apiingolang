@@ -10,6 +10,7 @@ import (
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/utils"
 	"apiingolang/activity/business/utils/logging"
+	"apiingolang/activity/middleware"
 	"context"
 	"errors"
 	"sync"
@@ -40,14 +41,14 @@ func NewActivityService(httprepo irepo.IHttpRepo, activityrepo irepo.IActivityRe
 	return c
 }
 
-func (as *activityService) FetchActivities(ctx context.Context) (dto.Activities, error) {
+func (as *activityService) FetchActivities(ctx context.Context, cancel context.CancelFunc) (dto.Activities, error) {
 	// fetch the 3 activities and other logic here
 	activities := dto.Activities{}
 	syncMap := utility.SyncMap{}
 	wg := sync.WaitGroup{}
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
-		go c.fetchActivity(ctx, &syncMap, &wg)
+		go c.fetchActivity(ctx, &syncMap, &wg, cancel)
 	}
 	wg.Wait()
 	for _, val := range syncMap.GetAllEntry() {
@@ -59,14 +60,22 @@ func (as *activityService) FetchActivities(ctx context.Context) (dto.Activities,
 		fectchedActivitiesFromBoredApi <- ac
 		activities = append(activities, ac)
 	}
+	// panic("this is a mock panic in api flow")
 	logging.Logger.WriteLogs(ctx, "activities_fetch_success", logging.InfoLevel, logging.Fields{"activities": activities})
 	return activities, nil
 }
 
-func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.SyncMap, wg *sync.WaitGroup) (*dto.Activity, error) {
+func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.SyncMap, wg *sync.WaitGroup, cancel context.CancelFunc) (*dto.Activity, error) {
 	// fetch a new activity here
-	start := time.Now()
 	defer wg.Done()
+	defer func() {
+		if err := recover(); err != nil {
+			middleware.Recover(ctx, err)
+			cancel()
+		}
+	}()
+	// panic("mock panic in sub go routine")
+	start := time.Now()
 	for time.Since(start) <= time.Second*2 {
 		var ac *dto.Activity
 		job := worker.NewJob(func() {

@@ -9,6 +9,7 @@ import (
 	"apiingolang/activity/business/usecase/activity"
 	"apiingolang/activity/business/utils/logging"
 	"apiingolang/activity/business/worker"
+	"apiingolang/activity/middleware"
 	"context"
 	"database/sql"
 	corehttp "net/http"
@@ -50,28 +51,38 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 }
 
 func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
+	ctx, cancel := context.WithCancel(c)
 	timelimitexceeded := false
 	activitiesList := dto.Activities{}
 	wg := make(chan struct{}, 1)
 
 	go maxtimewait(wg, &timelimitexceeded)
-	go ar.getActivities(c, &activitiesList, wg)
-	<-wg
-
-	if timelimitexceeded {
-		logging.Logger.WriteLogs(c, "time_limit_exceeded", logging.WarnLevel, logging.Fields{})
-		c.JSON(corehttp.StatusRequestTimeout, gin.H{
+	go ar.getActivities(ctx, &activitiesList, wg, cancel)
+	select {
+	case <-wg:
+		if timelimitexceeded {
+			logging.Logger.WriteLogs(ctx, "time_limit_exceeded", logging.WarnLevel, logging.Fields{})
+			c.JSON(corehttp.StatusRequestTimeout, gin.H{
+				"status":  false,
+				"message": "failure",
+				"error":   "(Activity-API not available)",
+			})
+		} else {
+			c.JSON(corehttp.StatusOK, gin.H{
+				"status":     true,
+				"message":    "success",
+				"activities": activitiesList,
+			})
+		}
+	case <-ctx.Done():
+		logging.Logger.WriteLogs(ctx, "cancel button hit", logging.InfoLevel, logging.Fields{})
+		c.JSON(corehttp.StatusInternalServerError, gin.H{
+			"message": "something went wrong",
 			"status":  false,
-			"message": "failure",
-			"error":   "(Activity-API not available)",
 		})
-	} else {
-		c.JSON(corehttp.StatusOK, gin.H{
-			"status":     true,
-			"message":    "success",
-			"activities": activitiesList,
-		})
+		return
 	}
+
 }
 
 func maxtimewait(wg chan struct{}, timelimitexceeded *bool) {
@@ -81,8 +92,14 @@ func maxtimewait(wg chan struct{}, timelimitexceeded *bool) {
 	wg <- struct{}{}
 }
 
-func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto.Activities, wg chan struct{}) {
-	activities, err := ar.activityManager.FetchActivities(ctx)
+func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto.Activities, wg chan struct{}, cancel context.CancelFunc) {
+	defer func() {
+		if err := recover(); err != nil {
+			middleware.Recover(ctx, err)
+			cancel()
+		}
+	}()
+	activities, err := ar.activityManager.FetchActivities(ctx, cancel)
 	// time.Sleep(3 * time.Second)
 	if err != nil {
 		logging.Logger.WriteLogs(ctx, "error_processing_activity_request", logging.ErrorLevel, logging.Fields{"error": err})

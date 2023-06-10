@@ -1,14 +1,18 @@
 package logging
 
 import (
+	"apiingolang/activity/middleware/corel"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path"
 	"sync"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,6 +21,7 @@ type Fields map[string]interface{}
 
 type ILogger interface {
 	WriteLogs(ctx context.Context, msg string, level Level, fields Fields)
+	Gin() gin.HandlerFunc
 }
 
 type zlogger struct {
@@ -68,6 +73,7 @@ func (l *zlogger) zapFields(fields Fields) []zapcore.Field {
 
 func (l *zlogger) WriteLogs(ctx context.Context, msg string, level Level, fields Fields) {
 	// do the logging here
+	fields[string(corel.RequestIDKey)] = corel.GetRequestIdFromContext(ctx)
 	l.normalizeFields(fields)
 	zapFields := l.zapFields(fields)
 	switch level {
@@ -114,4 +120,36 @@ func initializeLogger() error {
 		logger: zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)),
 	}
 	return nil
+}
+
+// GinLogger returns a gin.HandlerFunc middleware
+func (l *zlogger) Gin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		var fields = Fields{}
+		var level Level
+		level = InfoLevel
+		fields["time"] = start
+		defer l.WriteLogs(c, "http_request_init", level, fields)
+		c.Next()
+		stop := time.Since(start)
+		fields["latency"] = int(math.Ceil(float64(stop.Nanoseconds()) / 1000000.0))
+		code := c.Writer.Status()
+
+		fields["statusCode"] = code
+		dataLength := c.Writer.Size()
+		if dataLength < 0 {
+			dataLength = 0
+		}
+		fields["dataLength"] = dataLength
+
+		if len(c.Errors) > 0 {
+			fields["error"] = c.Errors.ByType(gin.ErrorTypePrivate).String()
+			level = ErrorLevel
+		} else if code > 499 {
+			level = ErrorLevel
+		} else if code > 399 {
+			level = WarnLevel
+		}
+	}
 }
