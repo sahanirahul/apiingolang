@@ -1,0 +1,6 @@
+*.log
+**/.vscode
+
+.log
+**/__debug_bin
+logs/

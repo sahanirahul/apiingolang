@@ -6,6 +6,7 @@ import (
 	"apiingolang/activity/business/repository/db"
 	"apiingolang/activity/business/repository/http"
 	"apiingolang/activity/business/usecase/activity"
+	"apiingolang/activity/business/worker"
 	"context"
 	"database/sql"
 	"fmt"
@@ -19,7 +20,8 @@ import (
 func provideActivityRouter(dbconn *sql.DB) *activityRouter {
 	httprepo := http.NewActivityHttpRepo()
 	dbrepo := db.NewActivityRepo(dbconn)
-	activityService := activity.NewActivityService(httprepo, dbrepo)
+	httpWorkerPool := worker.NewWorkerPool(3, 3) // this pool wil make sure that the boredapi is called on 3 at a time
+	activityService := activity.NewActivityService(httprepo, dbrepo, httpWorkerPool)
 	return newActivityRouter(activityService)
 
 }
@@ -49,15 +51,15 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 	//todo: CleanArch complete
 	//call activity service
 	timelimitexceeded := false
-	activitiesList := &dto.Activities{}
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go maxtimewait(&wg, &timelimitexceeded)
-	go ar.getActivities(c, activitiesList, &wg)
-	wg.Wait()
+	activitiesList := dto.Activities{}
+	wg := make(chan struct{}, 1)
+
+	go maxtimewait(wg, &timelimitexceeded)
+	go ar.getActivities(c, &activitiesList, wg)
+	<-wg
 
 	if timelimitexceeded {
-		c.JSON(corehttp.StatusUnprocessableEntity, gin.H{
+		c.JSON(corehttp.StatusRequestTimeout, gin.H{
 			"status":  false,
 			"message": "failure",
 			"error":   "(Activity-API not available)",
@@ -71,21 +73,19 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 	}
 }
 
-func maxtimewait(wg *sync.WaitGroup, timelimitexceeded *bool) {
+func maxtimewait(wg chan struct{}, timelimitexceeded *bool) {
 	timer := time.NewTimer(2 * time.Second)
 	<-timer.C
 	*timelimitexceeded = true
-	wg.Done()
-	wg.Done()
+	wg <- struct{}{}
 }
 
-func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto.Activities, wg *sync.WaitGroup) {
+func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto.Activities, wg chan struct{}) {
 	activities, err := ar.activityManager.FetchActivities(ctx)
 	// time.Sleep(3 * time.Second)
 	if err != nil {
 		fmt.Println(err)
 	}
-	activitiesList = &activities
-	wg.Done()
-	wg.Done()
+	*activitiesList = activities
+	wg <- struct{}{}
 }
