@@ -1,12 +1,14 @@
 package irepo
 
 import (
+	"apiingolang/activity/business/entities/core"
 	"apiingolang/activity/business/entities/dto"
 	"context"
 )
 
 type IActivityRepo interface {
-	InsertActivities(ctx context.Context) error
+	InsertActivity(ctx context.Context, act core.Activity) error
+	BatchInsertActivities(ctx context.Context, activities core.Activities) error
 }
 
 type IHttpRepo interface {

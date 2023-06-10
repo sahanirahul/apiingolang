@@ -1,12 +1,14 @@
 package activity
 
 import (
+	"apiingolang/activity/business/entities/core"
 	"apiingolang/activity/business/entities/dto"
 	"apiingolang/activity/business/entities/utility"
 	"apiingolang/activity/business/entities/worker"
 	"apiingolang/activity/business/interfaces/icore"
 	"apiingolang/activity/business/interfaces/irepo"
 	"apiingolang/activity/business/interfaces/iusecase"
+	"apiingolang/activity/business/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -31,6 +33,9 @@ func NewActivityService(httprepo irepo.IHttpRepo, activityrepo irepo.IActivityRe
 			activityrepo: activityrepo,
 			poolhttp:     poolhttp,
 		}
+		fectchedActivitiesFromBoredApi = make(chan dto.Activity, 100)
+		allFetchedActivities = utility.SyncList{}
+		go c.storeFetchedActivities()
 	})
 	return c
 }
@@ -52,6 +57,7 @@ func (as *activityService) FetchActivities(ctx context.Context) (dto.Activities,
 			fmt.Println(err)
 			continue
 		}
+		fectchedActivitiesFromBoredApi <- ac
 		activities = append(activities, ac)
 	}
 	return activities, nil
@@ -82,4 +88,52 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 		}
 	}
 	return nil, errors.New("time limit exceeded")
+}
+
+var allFetchedActivities utility.SyncList
+var fectchedActivitiesFromBoredApi chan dto.Activity
+var maxBatchSize = 50
+
+// this will be called from cron worker
+func (as *activityService) SaveFetchedActivitiesTillNow(ctx context.Context) error {
+	activities := core.Activities{}
+	actsTillNow := allFetchedActivities.GetAllEntryList()
+	var errs []error
+	err := utility.MapObjectToAnother(actsTillNow, &activities)
+	if err != nil {
+		fmt.Println("error while mapping activities : ", err.Error())
+		return err
+	}
+	var wg sync.WaitGroup
+	totalActivity := len(activities)
+	batchNo := 0
+	for i := 0; i < totalActivity; i = i + maxBatchSize {
+		batchNo++
+		end := utils.Min(i+maxBatchSize, totalActivity)
+		batch := activities[i:end]
+		fmt.Println("inserting batch number ", batchNo)
+		wg.Add(1)
+		// todo: should be done using worker pool to avoid goroutine outburst in case of huge number of activities
+		go func(acts core.Activities) {
+			defer wg.Done()
+			err := as.activityrepo.BatchInsertActivities(ctx, batch)
+			if err != nil {
+				fmt.Println("error while inserting bacth : ", err.Error())
+				errs = append(errs, err)
+			}
+		}(batch)
+
+	}
+	wg.Wait()
+	if len(errs) > 0 {
+		return utils.WrapErrors(errs)
+	}
+	return nil
+}
+
+func (as *activityService) storeFetchedActivities() {
+	for {
+		ac := <-fectchedActivitiesFromBoredApi
+		allFetchedActivities.Append(ac)
+	}
 }

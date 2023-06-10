@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"apiingolang/activity/business/cron"
 	"apiingolang/activity/business/entities/dto"
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/repository/db"
@@ -22,6 +23,7 @@ func provideActivityRouter(dbconn *sql.DB) *activityRouter {
 	dbrepo := db.NewActivityRepo(dbconn)
 	httpWorkerPool := worker.NewWorkerPool(3, 3) // this pool wil make sure that the boredapi is called on 3 at a time
 	activityService := activity.NewActivityService(httprepo, dbrepo, httpWorkerPool)
+	cron.StartNewCron(activityService)
 	return newActivityRouter(activityService)
 
 }
