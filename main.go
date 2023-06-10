@@ -2,9 +2,9 @@ package main
 
 import (
 	"apiingolang/activity/routes"
+	"log"
 	"net/http"
 
-	"fmt"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +21,6 @@ func main() {
 	err := router.Run(":" + os.Getenv("PORT"))
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(0)
+		log.Fatal(err)
 	}
 }

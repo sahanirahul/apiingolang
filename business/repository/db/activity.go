@@ -4,6 +4,7 @@ import (
 	"apiingolang/activity/business/entities/core"
 	"apiingolang/activity/business/interfaces/icore"
 	"apiingolang/activity/business/interfaces/irepo"
+	"apiingolang/activity/business/utils/logging"
 	"context"
 	"fmt"
 	"strings"
@@ -30,13 +31,13 @@ func (ar *activityrepo) InsertActivity(ctx context.Context, act core.Activity) e
 	query := "INSERT INTO activity (activity_key,activity_content) VALUES ($1,$2)"
 	conn, err := ar.db.Conn(ctx)
 	if err != nil {
-		fmt.Println(err)
+		logging.Logger.WriteLogs(ctx, "error_fetch_db_conn_insert", logging.ErrorLevel, logging.Fields{"error": err})
 		return err
 	}
 	defer conn.Close()
 	_, err = conn.ExecContext(ctx, query, act.Key, act.Activity)
 	if err != nil {
-		fmt.Println(err)
+		logging.Logger.WriteLogs(ctx, "error_batch_insert_execute", logging.ErrorLevel, logging.Fields{"error": err, "query": query, "activity": act})
 		return err
 	}
 	return nil
@@ -61,16 +62,17 @@ func (ar *activityrepo) BatchInsertActivities(ctx context.Context, activities co
 	}
 	query = fmt.Sprintf(query, valueStr)
 	query = strings.TrimSuffix(query, ",")
+	logging.Logger.WriteLogs(ctx, "batch_insert_activities_query", logging.InfoLevel, logging.Fields{"query": query, "qargs": values})
 
 	conn, err := ar.db.Conn(ctx)
 	if err != nil {
-		fmt.Println(err)
+		logging.Logger.WriteLogs(ctx, "error_fetch_db_conn_insert_batch", logging.ErrorLevel, logging.Fields{"error": err})
 		return err
 	}
 	defer conn.Close()
 	_, err = conn.ExecContext(ctx, query, values...)
 	if err != nil {
-		fmt.Println(err)
+		logging.Logger.WriteLogs(ctx, "error_batch_insert_execute", logging.ErrorLevel, logging.Fields{"error": err, "query": query, "values": values})
 		return err
 	}
 	return nil

@@ -2,10 +2,9 @@ package cron
 
 import (
 	"apiingolang/activity/business/interfaces/iusecase"
+	"apiingolang/activity/business/utils/logging"
 	"context"
-	"fmt"
 	"sync"
-	"time"
 
 	"github.com/robfig/cron"
 )
@@ -31,11 +30,12 @@ func (cro *cronn) storeBoredApiActivities() {
 	c := cron.New()
 
 	c.AddFunc("@every 15s", func() {
+		logging.Logger.WriteLogs(ctx, "cron_started", logging.InfoLevel, logging.Fields{})
 		err := cro.activityService.SaveFetchedActivitiesTillNow(ctx)
 		if err != nil {
-			fmt.Println(fmt.Sprintf("%s error while executing cron:\\n%s", time.Now(), err.Error()))
+			logging.Logger.WriteLogs(ctx, "error_while_executing_cron", logging.ErrorLevel, logging.Fields{"error": err})
 		}
-		fmt.Println(fmt.Sprintf("%s | cron execution success", time.Now()))
+		logging.Logger.WriteLogs(ctx, "cron_finisthed", logging.InfoLevel, logging.Fields{})
 	})
 	c.Start()
 }

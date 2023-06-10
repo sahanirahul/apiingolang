@@ -7,10 +7,10 @@ import (
 	"apiingolang/activity/business/repository/db"
 	"apiingolang/activity/business/repository/http"
 	"apiingolang/activity/business/usecase/activity"
+	"apiingolang/activity/business/utils/logging"
 	"apiingolang/activity/business/worker"
 	"context"
 	"database/sql"
-	"fmt"
 	corehttp "net/http"
 	"sync"
 	"time"
@@ -50,8 +50,6 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 }
 
 func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
-	//todo: CleanArch complete
-	//call activity service
 	timelimitexceeded := false
 	activitiesList := dto.Activities{}
 	wg := make(chan struct{}, 1)
@@ -61,6 +59,7 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 	<-wg
 
 	if timelimitexceeded {
+		logging.Logger.WriteLogs(c, "time_limit_exceeded", logging.WarnLevel, logging.Fields{})
 		c.JSON(corehttp.StatusRequestTimeout, gin.H{
 			"status":  false,
 			"message": "failure",
@@ -86,7 +85,7 @@ func (ar *activityRouter) getActivities(ctx context.Context, activitiesList *dto
 	activities, err := ar.activityManager.FetchActivities(ctx)
 	// time.Sleep(3 * time.Second)
 	if err != nil {
-		fmt.Println(err)
+		logging.Logger.WriteLogs(ctx, "error_processing_activity_request", logging.ErrorLevel, logging.Fields{"error": err})
 	}
 	*activitiesList = activities
 	wg <- struct{}{}

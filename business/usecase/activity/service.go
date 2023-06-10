@@ -9,9 +9,9 @@ import (
 	"apiingolang/activity/business/interfaces/irepo"
 	"apiingolang/activity/business/interfaces/iusecase"
 	"apiingolang/activity/business/utils"
+	"apiingolang/activity/business/utils/logging"
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -54,12 +54,12 @@ func (as *activityService) FetchActivities(ctx context.Context) (dto.Activities,
 		ac := dto.Activity{}
 		err := utility.MapObjectToAnother(val, &ac)
 		if err != nil {
-			fmt.Println(err)
-			continue
+			logging.Logger.WriteLogs(ctx, "error_mapping_object_and_activity", logging.ErrorLevel, logging.Fields{"error": err, "value": val})
 		}
 		fectchedActivitiesFromBoredApi <- ac
 		activities = append(activities, ac)
 	}
+	logging.Logger.WriteLogs(ctx, "activities_fetch_success", logging.InfoLevel, logging.Fields{"activities": activities})
 	return activities, nil
 }
 
@@ -72,7 +72,7 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 		job := worker.NewJob(func() {
 			a, err := c.httprepo.GetActivityFromBoredApi(ctx)
 			if err != nil {
-				fmt.Println(err)
+				logging.Logger.WriteLogs(ctx, "error_fetching_activity_from_bored_api", logging.ErrorLevel, logging.Fields{"error": err})
 				return
 			}
 			ac = a
@@ -87,6 +87,7 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 			return ac, nil
 		}
 	}
+	logging.Logger.WriteLogs(ctx, "time_limit_exceeded_fetching_activities", logging.WarnLevel, logging.Fields{})
 	return nil, errors.New("time limit exceeded")
 }
 
@@ -101,24 +102,22 @@ func (as *activityService) SaveFetchedActivitiesTillNow(ctx context.Context) err
 	var errs []error
 	err := utility.MapObjectToAnother(actsTillNow, &activities)
 	if err != nil {
-		fmt.Println("error while mapping activities : ", err.Error())
+		logging.Logger.WriteLogs(ctx, "error_json_unmarshal_activities", logging.ErrorLevel, logging.Fields{"error": err, "activities_till_now": actsTillNow})
 		return err
 	}
 	var wg sync.WaitGroup
 	totalActivity := len(activities)
-	batchNo := 0
+
 	for i := 0; i < totalActivity; i = i + maxBatchSize {
-		batchNo++
 		end := utils.Min(i+maxBatchSize, totalActivity)
 		batch := activities[i:end]
-		fmt.Println("inserting batch number ", batchNo)
 		wg.Add(1)
 		// todo: should be done using worker pool to avoid goroutine outburst in case of huge number of activities
 		go func(acts core.Activities) {
 			defer wg.Done()
 			err := as.activityrepo.BatchInsertActivities(ctx, batch)
 			if err != nil {
-				fmt.Println("error while inserting bacth : ", err.Error())
+				logging.Logger.WriteLogs(ctx, "error_batch_insert_into_db", logging.ErrorLevel, logging.Fields{"error": err, "batch": batch})
 				errs = append(errs, err)
 			}
 		}(batch)

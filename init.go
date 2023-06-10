@@ -2,9 +2,11 @@ package main
 
 import (
 	"apiingolang/activity/bootconfig"
+	"apiingolang/activity/business/utils/logging"
 	"apiingolang/activity/db"
-	"fmt"
+	"log"
 	"os"
+	"path"
 )
 
 const (
@@ -12,14 +14,16 @@ const (
 )
 
 func init() {
+	pwd, _ := os.Getwd()
 	os.Setenv("APP", app)
 	os.Setenv("PORT", "9000")
 	os.Setenv("CONFIGPATH", "/Users/rahulsahani/Desktop/Codebase/repos/apiingolang/config/config.local.json")
+	os.Setenv("LOGPATH", path.Join(pwd, "/logs/activity.log"))
 
 	bootconfig.InitConfig()
 	// Loading DB connections
 	if err := db.Init(); err != nil {
-		fmt.Println(err)
-		os.Exit(0)
+		log.Fatal(err)
 	}
+	logging.NewLogger()
 }
