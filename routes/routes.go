@@ -15,7 +15,7 @@ func InitRoutes(router *gin.Engine) {
 	api.Use(corel.DefaultGinHandlers...)
 	// adding recovery for api flow
 	api.Use(middleware.Recovery(logging.Logger))
-	api.Use(logging.Logger.Gin(), middleware.Recovery(logging.Logger))
+	api.Use(logging.Logger.Gin())
 	publicGroup := api.Group("/public")
 
 	routes.ActivityRoutes(publicGroup, db.ClientActivity)
