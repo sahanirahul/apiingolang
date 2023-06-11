@@ -89,21 +89,33 @@ func (l *zlogger) WriteLogs(ctx context.Context, msg string, level Level, fields
 	}
 }
 
+func createFile(filepath string) {
+	// Create a file
+	file, err := os.Create(filepath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+}
+
 func initializeLogger() error {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
 	consoleEncoder := zapcore.NewConsoleEncoder(config)
-	logfilePath := os.Getenv("LOGPATH")
+	today := time.Now().Format("2006-01-02")
+	logdir := os.Getenv("LOGDIR")
 
-	if len(logfilePath) == 0 {
+	if len(logdir) == 0 {
 		pwd, _ := os.Getwd()
-		defaultLogDir := path.Join(pwd, "logs")
-		if err := os.MkdirAll(defaultLogDir, os.ModePerm); err != nil {
+		logdir := path.Join(pwd, "logs")
+		if err := os.MkdirAll(logdir, os.ModePerm); err != nil {
 			log.Fatal(err)
 		}
-		logfilePath = path.Join(path.Join(defaultLogDir, "activity.log"))
+
 	}
+	logfilePath := path.Join(path.Join(logdir, today))
+	createFile(logfilePath)
 	logFile, err := os.OpenFile(logfilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -60,7 +61,9 @@ func initPostgres(secret []byte) error {
 }
 
 func getPostgresConnection(dbObject DbObject) (*sql.DB, error) {
-
+	if os.Getenv("ENV") == "local" {
+		dbObject.Host = "localhost"
+	}
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
 		dbObject.Host, dbObject.Port, dbObject.User, dbObject.Password, dbObject.DbName)

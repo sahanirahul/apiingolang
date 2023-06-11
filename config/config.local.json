@@ -10,9 +10,9 @@
   },
   "db/postgres": {
     "username": "rahulsahani",
-    "password": "rahulsahani@123",
+    "password": "1234@123",
     "engine": "postgres",
-    "host": "localhost",
+    "host": "192.168.29.45",
     "port": 5432,
     "dbInstanceIdentifier": "localhost",
     "dbName": "test"
