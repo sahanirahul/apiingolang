@@ -23,8 +23,14 @@ import (
 func provideActivityRouter(dbconn *sql.DB) *activityRouter {
 	httprepo := http.NewActivityHttpRepo()
 	dbrepo := db.NewActivityRepo(dbconn)
-	httpWorkerPool := worker.NewWorkerPool(3, 3) // this pool wil make sure that the boredapi is called on 3 at a time
-	activityService := activity.NewActivityService(httprepo, dbrepo, httpWorkerPool)
+	// this pool wil make sure that the boredapi is called on 3 at a time
+	httpWorkerPool := worker.NewWorkerPool(3, 3)
+	// this pool wil execute db insert and other sub go routines,
+	// this will also ensure that there is no outburst of go routine
+	// for example if we spawned 3 go routine (1 for each activity),
+	// and there were 2000 request in 1 sec, 6000 go routines will be created
+	generalPool := worker.NewWorkerPool(10, 10)
+	activityService := activity.NewActivityService(httprepo, dbrepo, httpWorkerPool, generalPool)
 	cron.StartNewCron(activityService)
 	return newActivityRouter(activityService)
 
@@ -53,13 +59,17 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 
 func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 	ctx := context.WithValue(c, corel.RequestIDKey, corel.GetRequestIdFromContext(c))
-	ctx, cancel := context.WithCancel(ctx)
+	// this context will be used to handle timeout and cancel outoing request
+	ctx1, cancel1 := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel1()
+	// this context will will be used by recovery mechanism
+	ctx2, cancel := context.WithCancel(c)
 	timelimitexceeded := false
 	activitiesList := dto.Activities{}
 	wg := make(chan struct{}, 1)
 
 	go maxtimewait(wg, &timelimitexceeded)
-	go ar.getActivities(ctx, &activitiesList, wg, cancel)
+	go ar.getActivities(ctx1, &activitiesList, wg, cancel)
 	select {
 	case <-wg:
 		if timelimitexceeded {
@@ -67,7 +77,7 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 			c.JSON(corehttp.StatusRequestTimeout, gin.H{
 				"status":  false,
 				"message": "failure",
-				"error":   "(Activity-API not available)",
+				"error":   "Activity-API not available",
 			})
 		} else {
 			c.JSON(corehttp.StatusOK, gin.H{
@@ -76,7 +86,8 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 				"activities": activitiesList,
 			})
 		}
-	case <-ctx.Done():
+	// when panic occurs and cancel is called
+	case <-ctx2.Done():
 		logging.Logger.WriteLogs(c, "cancel button hit", logging.InfoLevel, logging.Fields{})
 		c.JSON(corehttp.StatusInternalServerError, gin.H{
 			"message": "something went wrong",

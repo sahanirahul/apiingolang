@@ -22,24 +22,26 @@ type activityService struct {
 	httprepo     irepo.IHttpRepo
 	activityrepo irepo.IActivityRepo
 	poolhttp     icore.IPool
+	poolgeneral  icore.IPool
 }
 
-var c *activityService
+var actServ *activityService
 var conce sync.Once
 
-func NewActivityService(httprepo irepo.IHttpRepo, activityrepo irepo.IActivityRepo, poolhttp icore.IPool) iusecase.IActivityService {
+func NewActivityService(httprepo irepo.IHttpRepo, activityrepo irepo.IActivityRepo, poolhttp icore.IPool, poolgeneral icore.IPool) iusecase.IActivityService {
 
 	conce.Do(func() {
-		c = &activityService{
+		actServ = &activityService{
 			httprepo:     httprepo,
 			activityrepo: activityrepo,
 			poolhttp:     poolhttp,
+			poolgeneral:  poolgeneral,
 		}
 		fectchedActivitiesFromBoredApi = make(chan dto.Activity, 100)
 		allFetchedActivities = utility.SyncList{}
-		go c.storeFetchedActivities()
+		go actServ.storeFetchedActivities()
 	})
-	return c
+	return actServ
 }
 
 func (as *activityService) FetchActivities(ctx context.Context, cancel context.CancelFunc) (dto.Activities, error) {
@@ -49,7 +51,9 @@ func (as *activityService) FetchActivities(ctx context.Context, cancel context.C
 	wg := sync.WaitGroup{}
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
-		go c.fetchActivity(ctx, &syncMap, &wg, cancel)
+		as.poolgeneral.AddJob(worker.NewJob(func() {
+			as.fetchActivity(ctx, &syncMap, &wg, cancel)
+		}))
 	}
 	// panic("this is a mock panic in api flow")
 	wg.Wait()
@@ -76,11 +80,26 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 			cancel()
 		}
 	}()
+	result := as.activityUtil(ctx, syncmap, cancel)
+	select {
+	case <-result:
+	case <-time.After(2 * time.Second):
+		logging.Logger.WriteLogs(ctx, "time_limit_exceeded_fetching_activities", logging.WarnLevel, logging.Fields{})
+	}
+	return nil, errors.New("time limit exceeded")
+}
+
+func (as *activityService) activityUtil(ctx context.Context, syncmap *utility.SyncMap, cancel context.CancelFunc) <-chan error {
 	errCh := make(chan any, 1)
-	start := time.Now()
-	for time.Since(start) <= time.Second*2 {
+	result := make(chan error, 1)
+	defer close(result)
+	deadline := time.Now().Add(2 * time.Second)
+	if dl, ok := ctx.Deadline(); ok {
+		deadline = dl
+	}
+	for time.Since(deadline) < 0 {
 		var ac *dto.Activity
-		job := worker.NewJob(func() {
+		job := worker.NewJobWithDeadline(func() {
 			defer func() {
 				if err := recover(); err != nil {
 					middleware.Recover(ctx, err)
@@ -88,34 +107,38 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 					errCh <- err
 				}
 			}()
-			a, err := c.httprepo.GetActivityFromBoredApi(ctx)
+			a, err := as.httprepo.GetActivityFromBoredApi(ctx)
 			if err != nil {
 				logging.Logger.WriteLogs(ctx, "error_fetching_activity_from_bored_api", logging.ErrorLevel, logging.Fields{"error": err})
 				return
 			}
 			ac = a
-		})
+		}, deadline)
 		as.poolhttp.AddJob(job)
 		<-job.Done()
 		if len(errCh) > 0 {
 			e := <-errCh
-			return ac, fmt.Errorf("panic while executing boredapi job. %v", e)
+			err := fmt.Errorf("panic while executing boredapi job. %v", e)
+			// logging.Logger.WriteLogs(ctx, "Panic", logging.ErrorLevel, logging.Fields{"error": err})
+			result <- err
+			return result
 		}
 		if ac == nil || len(ac.Key) == 0 {
 			continue
 		}
 		flag := syncmap.PutIfNotPresent(ac.Key, ac)
 		if flag {
-			return ac, nil
+			result <- nil
+			return result
 		}
 	}
-	logging.Logger.WriteLogs(ctx, "time_limit_exceeded_fetching_activities", logging.WarnLevel, logging.Fields{})
-	return nil, errors.New("time limit exceeded")
+	result <- nil
+	return result
 }
 
 var allFetchedActivities utility.SyncList
 var fectchedActivitiesFromBoredApi chan dto.Activity
-var maxBatchSize = 50
+var maxBatchSize = 5
 
 // this will be called from cron worker
 func (as *activityService) SaveFetchedActivitiesTillNow(ctx context.Context) error {
@@ -135,14 +158,14 @@ func (as *activityService) SaveFetchedActivitiesTillNow(ctx context.Context) err
 		batch := activities[i:end]
 		wg.Add(1)
 		// todo: should be done using worker pool to avoid goroutine outburst in case of huge number of activities
-		go func(acts core.Activities) {
+		as.poolgeneral.AddJob(worker.NewJob(func() {
 			defer wg.Done()
 			err := as.activityrepo.BatchInsertActivities(ctx, batch)
 			if err != nil {
 				logging.Logger.WriteLogs(ctx, "error_batch_insert_into_db", logging.ErrorLevel, logging.Fields{"error": err, "batch": batch})
 				errs = append(errs, err)
 			}
-		}(batch)
+		}))
 
 	}
 	wg.Wait()

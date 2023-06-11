@@ -4,7 +4,6 @@ import (
 	entitiesworker "apiingolang/activity/business/entities/worker"
 	"apiingolang/activity/business/interfaces/icore"
 	"fmt"
-	"sync/atomic"
 )
 
 type worker struct {
@@ -23,14 +22,10 @@ func (w *worker) start() {
 	}
 }
 
-var numberOfJobs atomic.Int64
-
 func (w *worker) run(workerId int) {
 	fmt.Println("starting worker ", workerId)
 	for {
 		job := <-w.jobs
-		val := numberOfJobs.Add(1)
-		fmt.Println(fmt.Sprintf("worker %d executing job %d", workerId, val))
 		job.Execute()
 	}
 }

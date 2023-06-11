@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -26,9 +25,10 @@ type HttpRequest struct {
 func (request *HttpRequest) InitiateHttpCall(ctx context.Context, respObject interface{}) (int, error) {
 	headers := addDefaultHeaders(ctx, request.Headers)
 	reqBody := bytes.NewBuffer(request.Body)
-	req, err := http.NewRequest(request.Method, request.URL, reqBody)
+	// req, err := http.NewRequest(request.Method, request.URL, reqBody)
+	req, err := http.NewRequestWithContext(ctx, request.Method, request.URL, reqBody)
 	if err != nil {
-		fmt.Println(err)
+		// logging.Logger.WriteLogs(ctx, "error_creating_http_request_with_context", logging.ErrorLevel, logging.Fields{"error": err})
 		return 0, err
 	}
 	req.Header = headers
