@@ -15,6 +15,8 @@ This Go project consists of 2 component:
     activity_content VARCHAR(512),
     created_at timestamp default current_timestamp
   );
+  
+- CREATE INDEX idx_activity_key ON activity (activity_key);
 ```
 #### api end point
 - `/api/public/vi/activities` 
