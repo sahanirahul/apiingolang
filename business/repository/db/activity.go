@@ -77,3 +77,30 @@ func (ar *activityrepo) BatchInsertActivities(ctx context.Context, activities co
 	}
 	return nil
 }
+
+func (ar *activityrepo) GetActivityFrequency(ctx context.Context) ([]core.ActivityFrequency, error) {
+	query := "Select activity_key, min(activity_content),count(1) from activity group by activity_key"
+	conn, err := ar.db.Conn(ctx)
+	if err != nil {
+		logging.Logger.WriteLogs(ctx, "error_fetch_db_conn_insert_batch", logging.ErrorLevel, logging.Fields{"error": err})
+		return nil, err
+	}
+	defer conn.Close()
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		logging.Logger.WriteLogs(ctx, "error_fetching_activity_frequency_from_db", logging.ErrorLevel, logging.Fields{"error": err, "query": query})
+		return nil, err
+	}
+	defer rows.Close()
+	list := []core.ActivityFrequency{}
+	freq := core.ActivityFrequency{}
+	for rows.Next() {
+		err = rows.Scan(&freq.Key, &freq.Activity, &freq.Frequency)
+		if err != nil {
+			logging.Logger.WriteLogs(ctx, "error_scanning_activity_frequency_from_db", logging.ErrorLevel, logging.Fields{"error": err})
+			return nil, err
+		}
+		list = append(list, freq)
+	}
+	return list, nil
+}

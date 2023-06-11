@@ -20,3 +20,9 @@ func GetActivities(acts dto.Activities) Activities {
 	}
 	return activities
 }
+
+type ActivityFrequency struct {
+	Key       string
+	Activity  string
+	Frequency int
+}

@@ -9,6 +9,7 @@ import (
 type IActivityRepo interface {
 	InsertActivity(ctx context.Context, act core.Activity) error
 	BatchInsertActivities(ctx context.Context, activities core.Activities) error
+	GetActivityFrequency(ctx context.Context) ([]core.ActivityFrequency, error)
 }
 
 type IHttpRepo interface {

@@ -8,6 +8,7 @@ import (
 	"apiingolang/activity/business/utils"
 	"apiingolang/activity/business/utils/logging"
 	"context"
+	"log"
 	"sync"
 )
 
@@ -52,8 +53,25 @@ func (as *activityService) SaveFetchedActivitiesTillNow(ctx context.Context) err
 
 	}
 	wg.Wait()
+	as.printActivityFrequency(ctx)
 	if len(errs) > 0 {
 		return utils.WrapErrors(errs)
 	}
 	return nil
+}
+
+func (as *activityService) printActivityFrequency(ctx context.Context) {
+	activityfreqList, err := as.activityrepo.GetActivityFrequency(ctx)
+	if err != nil {
+		logging.Logger.WriteLogs(ctx, "error_fetching_activity_frequency", logging.ErrorLevel, logging.Fields{"error": err})
+		return
+	}
+	log.Println("logging how many times each unique activity was returned to your API callers.")
+	log.Println("-----------------------------------------------------------------------------------------")
+	log.Println("activity-key : activity-frequency : activity-content")
+	for _, val := range activityfreqList {
+		log.Println(val.Key, "     :        ", val.Frequency, "         : ", val.Activity)
+	}
+	log.Println("-----------------------------------------------------------------------------------------")
+	log.Println("finished logging")
 }
