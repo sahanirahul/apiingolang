@@ -28,8 +28,8 @@ func init() {
 			os.Setenv("LOGDIR", path.Join(pwd, "logs"))
 		}
 	}
-	fmt.Println(os.Getenv("CONFIGPATH"))
-	fmt.Println(os.Getenv("LOGPATH"))
+	fmt.Println("CONFIGPATH=", os.Getenv("CONFIGPATH"))
+	fmt.Println("LOGDIR=", os.Getenv("LOGDIR"))
 	bootconfig.InitConfig()
 	// Loading DB connections
 	if err := db.Init(); err != nil {
