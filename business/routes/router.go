@@ -10,6 +10,7 @@ import (
 	"apiingolang/activity/business/utils/logging"
 	"apiingolang/activity/business/worker"
 	"apiingolang/activity/middleware"
+	"apiingolang/activity/middleware/corel"
 	"context"
 	"database/sql"
 	corehttp "net/http"
@@ -51,7 +52,8 @@ func newActivityRouter(as iusecase.IActivityService) *activityRouter {
 }
 
 func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
-	ctx, cancel := context.WithCancel(c)
+	ctx := context.WithValue(c, corel.RequestIDKey, corel.GetRequestIdFromContext(c))
+	ctx, cancel := context.WithCancel(ctx)
 	timelimitexceeded := false
 	activitiesList := dto.Activities{}
 	wg := make(chan struct{}, 1)
@@ -75,7 +77,7 @@ func (ar *activityRouter) processActivitiesRequest(c *gin.Context) {
 			})
 		}
 	case <-ctx.Done():
-		logging.Logger.WriteLogs(ctx, "cancel button hit", logging.InfoLevel, logging.Fields{})
+		logging.Logger.WriteLogs(c, "cancel button hit", logging.InfoLevel, logging.Fields{})
 		c.JSON(corehttp.StatusInternalServerError, gin.H{
 			"message": "something went wrong",
 			"status":  false,

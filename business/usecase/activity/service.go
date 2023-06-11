@@ -13,6 +13,7 @@ import (
 	"apiingolang/activity/middleware"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -50,6 +51,7 @@ func (as *activityService) FetchActivities(ctx context.Context, cancel context.C
 		wg.Add(1)
 		go c.fetchActivity(ctx, &syncMap, &wg, cancel)
 	}
+	// panic("this is a mock panic in api flow")
 	wg.Wait()
 	for _, val := range syncMap.GetAllEntry() {
 		ac := dto.Activity{}
@@ -74,11 +76,18 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 			cancel()
 		}
 	}()
-	// panic("mock panic in sub go routine")
+	errCh := make(chan any, 1)
 	start := time.Now()
 	for time.Since(start) <= time.Second*2 {
 		var ac *dto.Activity
 		job := worker.NewJob(func() {
+			defer func() {
+				if err := recover(); err != nil {
+					middleware.Recover(ctx, err)
+					cancel()
+					errCh <- err
+				}
+			}()
 			a, err := c.httprepo.GetActivityFromBoredApi(ctx)
 			if err != nil {
 				logging.Logger.WriteLogs(ctx, "error_fetching_activity_from_bored_api", logging.ErrorLevel, logging.Fields{"error": err})
@@ -88,6 +97,10 @@ func (as *activityService) fetchActivity(ctx context.Context, syncmap *utility.S
 		})
 		as.poolhttp.AddJob(job)
 		<-job.Done()
+		if len(errCh) > 0 {
+			e := <-errCh
+			return ac, fmt.Errorf("panic while executing boredapi job. %v", e)
+		}
 		if ac == nil || len(ac.Key) == 0 {
 			continue
 		}

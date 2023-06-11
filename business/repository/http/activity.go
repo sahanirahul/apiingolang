@@ -36,5 +36,6 @@ func (cr *httprepo) GetActivityFromBoredApi(ctx context.Context) (*dto.Activity,
 	if status != http.StatusOK {
 		fmt.Println("falied http request with code ", status)
 	}
+	// panic("mock panic in boredapi")
 	return &response, nil
 }
