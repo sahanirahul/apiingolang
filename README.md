@@ -21,7 +21,12 @@ This Go project consists of 2 component:
 #### api end point
 - `/api/public/vi/activities` 
 - the api serves on `port=9000`
-
+- Response code
+``` golang
+    - 200 : success
+    - 408 : time out (> 2 second)
+    - 500 : panic in server
+```
 #### how to run
 - As Docker Container
   - Run the start.sh (./start.sh) script file to start, and stop.sh (./stop.sh) file to stop
